@@ -1,0 +1,16 @@
+#cloud-config
+users:
+  - default
+  - name: ubuntu
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ9xd2wl1BSyecyTFTKUpDfvyJg2QdoZSfVw6SJNCjuC alysondsouza@yahoo.com
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+  - vim

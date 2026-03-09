@@ -1,0 +1,10 @@
+---
+# playbooks/app-server.yml
+# Configures the app-server VM
+# Run with: ansible-playbook -i inventories/hosts.ini playbooks/app-server.yml
+
+- hosts: db_server
+  become: true        # run tasks as sudo
+  roles:
+    - docker          # install Docker first
+#    - tomcat          # then run Tomcat container

@@ -1,0 +1,54 @@
+---
+# roles/docker/tasks/main.yml
+# Installs Docker Engine on Ubuntu 24.04
+# Idempotent — safe to run multiple times
+
+- name: Install dependencies
+  apt:
+    name:
+      - apt-transport-https   # allows apt to fetch packages over HTTPS
+      - ca-certificates       # trusted certificates to verify download.docker.com
+      - curl                  # used to download Docker's GPG key
+    state: present
+    update_cache: true        # runs apt update before installing
+
+- name: Create Docker keyring directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Docker GPG key
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+
+- name: Add Docker apt repository
+  apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_distribution_release }} stable
+    state: present
+    filename: docker                        # creates /etc/apt/sources.list.d/docker.list
+
+- name: Install Docker Engine
+  apt:
+    name:
+      - docker-ce             # Docker Community Edition (the engine)
+      - docker-ce-cli         # Docker command line tool
+      - containerd.io         # container runtime Docker runs on top of
+    state: present
+    update_cache: true
+
+- name: Start and enable Docker service
+  service:
+    name: docker
+    state: started
+    enabled: true             # ensures Docker starts on VM reboot
+
+- name: Add ubuntu user to docker group
+  user:
+    name: ubuntu
+    groups: docker
+    append: true              # append to existing groups, don't replace them
