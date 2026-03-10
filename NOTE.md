@@ -658,6 +658,106 @@ source ~/.bashrc
 | Java  | 21.0.7   |
 | Maven | 3.6.3    |
 
+
 ---
+
+# Chapter 8 — Hello World WAR (Standalone Tomcat)
+
+## Result
+- GET /hello → "Hello World from Tomcat!"
+- GET /bye   → "Ciao!"
+- Accessible from Windows browser at http://172.28.128.54:8080/hello
+- Tagged in Git: v1.0-tomcat
+
+---
+
+## Project structure
+```
+kanbana/
+├── pom.xml
+└── src/main/
+    ├── java/com/kanbana/
+    │   ├── HelloServlet.java       ← handles GET /hello
+    │   └── ByeServlet.java         ← handles GET /bye
+    └── webapp/
+        └── WEB-INF/
+            └── web.xml             ← maps URLs to servlet classes
+```
+
+---
+
+## How it works
+
+```
+Browser: GET /hello
+              ↓
+         Tomcat reads web.xml
+              ↓
+         /hello → helloServlet → com.kanbana.HelloServlet
+              ↓
+         Tomcat calls doGet()
+              ↓
+         "Hello World from Tomcat!"
+```
+
+- web.xml is the glue — maps URLs to classes
+- Servlet classes have no idea what URL they are mapped to (Single Responsibility)
+- doGet() is named after the HTTP verb, not the URL
+
+---
+
+## pom.xml — key decisions
+
+| Setting | Value | Why |
+|---|---|---|
+| packaging | war | produces a .war file for Tomcat |
+| finalName | ROOT | deploys to root context / instead of /kanbana |
+| servlet-api scope | provided | Tomcat already has it at runtime |
+| plugins | explicitly versioned | always pin plugin versions — Maven defaults are outdated |
+
+---
+
+## Deployment
+
+```bash
+# Build
+mvn clean package                           # produces target/ROOT.war
+
+# Copy to app-server
+scp target/ROOT.war ubuntu@<ip>:/tmp/
+
+# Shell into app-server
+ssh ubuntu@<ip>
+
+# Copy into running Tomcat container
+docker cp /tmp/ROOT.war tomcat:/usr/local/tomcat/webapps/ROOT.war
+
+# Tomcat auto-deploys — no restart needed
+curl http://localhost:8080/hello
+curl http://localhost:8080/bye
+```
+
+> docker cp is required — containers have their own filesystem.
+> Regular cp cannot cross the container boundary.
+
+---
+
+## Issues encountered
+
+| Problem | Cause | Fix |
+|---|---|---|
+| BUILD FAILURE — war plugin | maven-war-plugin 2.2 incompatible with Java 21 | Pin maven-war-plugin to 3.4.0 in pom.xml |
+
+---
+
+## Key takeaways
+- One servlet class per endpoint — scales poorly (30 endpoints = 30 classes)
+- URL mapping lives in web.xml — separate from the servlet code
+- WAR named ROOT.war gets the root context /
+- Tomcat auto-deploys WARs dropped into webapps/ — no restart needed
+- This approach is legacy but still common in enterprises
+- Spring Boot (Option B) solves the one-class-per-endpoint problem
+
+
 
 
