@@ -1,7 +1,6 @@
 ---
 # roles/docker/tasks/main.yml
 # Installs Docker Engine on Ubuntu 24.04
-# Idempotent — safe to run multiple times
 
 - name: Install dependencies
   apt:
@@ -9,6 +8,7 @@
       - apt-transport-https   # allows apt to fetch packages over HTTPS
       - ca-certificates       # trusted certificates to verify download.docker.com
       - curl                  # used to download Docker's GPG key
+      - python3-pip           # required to install Docker Python SDK
     state: present
     update_cache: true        # runs apt update before installing
 
@@ -21,7 +21,9 @@
 - name: Download Docker GPG key
   shell: |
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-    gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg  # skip if already exists
 
 - name: Add Docker apt repository
   apt_repository:
@@ -46,6 +48,12 @@
     name: docker
     state: started
     enabled: true             # ensures Docker starts on VM reboot
+
+- name: Install Docker Python SDK
+  pip:
+    name: docker
+    state: present
+    extra_args: --break-system-packages  # Ubuntu 24.04 protects system Python by default
 
 - name: Add ubuntu user to docker group
   user:

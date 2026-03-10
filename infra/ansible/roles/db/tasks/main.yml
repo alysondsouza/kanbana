@@ -1,0 +1,48 @@
+---
+# roles/db/tasks/main.yml
+# Idempotent — safe to run multiple times
+
+- name: Create Docker network
+  docker_network:
+    name: kanbana-net       # shared network so PgBouncer can reach Postgres by container name
+
+- name: Create Postgres data volume
+  docker_volume:
+    name: postgres-data     # persists DB data across container restarts
+
+- name: Run Postgres container
+  docker_container:
+    name: postgres
+    image: postgres:17      # latest LTS
+    state: started
+    restart_policy: always  # restart on VM reboot
+    networks:
+      - name: kanbana-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"         # internal only — apps should never connect directly to Postgres
+    env:
+      POSTGRES_DB: "{{ db_name }}"
+      POSTGRES_USER: "{{ db_user }}"
+      POSTGRES_PASSWORD: "{{ db_password }}"
+
+- name: Run PgBouncer container
+  docker_container:
+    name: pgbouncer
+    image: edoburu/pgbouncer:v1.25.1-p0  # pgbouncer/pgbouncer is abandoned — edoburu is actively maintained
+    state: started
+    restart_policy: always
+    networks:
+      - name: kanbana-net
+    ports:
+      - "6432:6432"         # apps connect here — PgBouncer default port
+    env:
+      DB_HOST: postgres                 # container name on kanbana-net
+      DB_PORT: "5432"                   # Postgres internal port
+      DB_NAME: "{{ db_name }}"
+      DB_USER: "{{ db_user }}"
+      DB_PASSWORD: "{{ db_password }}"
+      POOL_MODE: transaction            # most efficient pool mode for web apps
+      MAX_CLIENT_CONN: "100"
+      DEFAULT_POOL_SIZE: "20"
