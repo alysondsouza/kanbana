@@ -615,3 +615,49 @@ docker ps                          # postgres and pgbouncer containers running
 docker logs postgres               # check for errors
 docker exec -it postgres psql -U kanbana -d kanbana -c "\l"  # list databases
 ```
+
+---
+
+# Chapter 6 — Java & Maven (WSL)
+
+## Step 1 — Install Java 21 LTS + Maven
+
+```bash
+sudo apt update
+sudo apt install openjdk-21-jdk -y
+sudo apt install maven -y
+```
+
+Verify:
+```bash
+java -version   # openjdk 21.x.x
+mvn -version    # Apache Maven 3.x.x
+```
+
+## Step 2 — Verify JAVA_HOME
+
+```bash
+echo $JAVA_HOME
+```
+
+If empty, add to `~/.bashrc`:
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export PATH=$JAVA_HOME/bin:$PATH
+```
+
+Reload:
+```bash
+source ~/.bashrc
+```
+
+## Versions installed
+
+| Tool  | Version  |
+|-------|----------|
+| Java  | 21.0.7   |
+| Maven | 3.6.3    |
+
+---
+
+
