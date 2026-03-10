@@ -7,4 +7,4 @@
   become: true        # run tasks as sudo
   roles:
     - docker          # install Docker first
-    - db              # then run Postgres + PgBouncer
+    - tomcat          # install tomcat
