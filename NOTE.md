@@ -661,7 +661,6 @@ source ~/.bashrc
 
 ---
 
----
 
 # Chapter 7 — Hello World WAR (Standalone Tomcat)
 
@@ -775,8 +774,8 @@ ansible-playbook --ask-vault-pass ansible/playbooks/db-server.yml
 # 4. Rebuild and redeploy WAR
 cd ~/kanbana
 mvn clean package
-scp target/ROOT.war ubuntu@<new-ip>:/tmp/
-ssh ubuntu@<new-ip>
+scp target/ROOT.war ubuntu@<ip>:/tmp/
+ssh ubuntu@<ip>
 docker cp /tmp/ROOT.war tomcat:/usr/local/tomcat/webapps/ROOT.war
 curl http://localhost:8080/hello
 ```
@@ -800,3 +799,172 @@ curl http://localhost:8080/hello
 - Tomcat auto-deploys WARs dropped into webapps/ — no restart needed
 - This approach is legacy but still common in enterprises
 - Spring Boot (Option B) solves the one-class-per-endpoint problem
+
+
+___
+
+
+# Chapter 8 — Hello World (Embedded Tomcat via Spring Boot)
+
+## Result
+- `GET /hello` → `"Hello World from embedded Tomcat!"`
+- `GET /bye` → `"Ciao!"`
+- Accessible at `http://<app-server-ip>:8080/hello`
+- Tagged in Git: `v1.0-embedded`
+
+---
+
+## vs Option A (WAR)
+
+| | Option A (WAR) | Option B (JAR) |
+|---|---|---|
+| Server | External Tomcat in Docker | Tomcat inside your JAR |
+| Deploy | Copy file into volume | `java -jar` |
+| Config | `web.xml` | `application.properties` |
+| Startup | Tomcat was already running | App starts its own server |
+| Endpoints | One class per endpoint | One method per endpoint |
+| Modern? | Legacy | Current standard |
+
+---
+
+## Generate project with Spring Initializr
+
+> ⚠️ https://start.spring.io defaults to `4.0.3` — not LTS — works fine with Java 21.
+
+```bash
+curl https://start.spring.io/starter.tgz \
+  -d type=maven-project \
+  -d language=java \
+  -d bootVersion=4.0.3 \
+  -d groupId=com.kanbana \
+  -d artifactId=kanbana \
+  -d name=kanbana \
+  -d description="kanbana - embedded tomcat" \
+  -d packageName=com.kanbana \
+  -d packaging=jar \
+  -d javaVersion=21 \
+  -d dependencies=web \
+  | tar -xzvf -
+```
+
+---
+
+## What gets generated
+
+```
+kanbana/
+├── pom.xml                                 ← Spring Boot config, packaging=jar
+├── mvnw / mvnw.cmd                         ← Maven wrapper — ignore for now
+├── HELP.md                                 ← can delete
+└── src/
+    ├── main/
+    │   ├── java/com/kanbana/
+    │   │   └── KanbanaApplication.java     ← entry point, starts embedded Tomcat
+    │   └── resources/
+    │       ├── application.properties      ← app config (port, db, etc)
+    │       ├── static/                     ← frontend assets
+    │       └── templates/                  ← server-side HTML templates
+    └── test/
+        └── java/com/kanbana/
+            └── KanbanaApplicationTests.java
+```
+
+---
+
+## What we add manually
+
+- `AppController.java` ← `GET /hello` and `GET /bye` in one class
+
+> One class handles all endpoints for a feature — in Option A (WAR) you needed a separate servlet class per endpoint, each registered in web.xml. 
+> Here, one @RestController handles both /hello and /bye, and Spring registers them automatically via annotation scanning.
+
+---
+
+## application.properties
+
+Location: `src/main/resources/application.properties`
+
+Maven copies everything in `src/main/resources/` to the JAR root on `mvn package`.
+Spring Boot reads `application.properties` from the classpath root on startup — no extra config needed.
+
+```properties
+server.port=8080
+spring.datasource.url=jdbc:postgresql://localhost:5432/kanbana
+```
+
+---
+
+## Infrastructure — app-server
+
+The JAR contains embedded Tomcat — no Tomcat container needed on app-server.
+
+```
+app-server VM → Docker → eclipse-temurin:21 → java -jar kanbana.jar
+```
+
+> `openjdk:21` is deprecated on Docker Hub — use `eclipse-temurin:21`.
+
+Ansible `java` role (`infra/ansible/roles/java/tasks/main.yml`):
+1. Creates `/opt/kanbana/` on the VM
+2. Creates the container (stopped)
+3. Copies `target/kanbana.jar` from WSL to `/opt/kanbana/kanbana.jar`
+4. Starts the container
+
+---
+
+## Build and deploy
+
+```bash
+# 1. Build JAR in WSL
+mvn clean package                           # produces target/kanbana.jar
+
+# 2. Deploy via Ansible
+cd infra
+ansible-playbook ansible/playbooks/app-server.yml
+
+# 3. Test
+curl http://<ip>:8080/hello
+curl http://<ip>:8080/bye
+```
+
+---
+
+## Rebuild from scratch (VMs deleted or IPs changed)
+
+```bash
+# 1. Launch VMs
+multipass launch -n app-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
+  --cloud-init infra/cloud-init/cloud-init.yaml \
+  --mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
+
+multipass launch -n db-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
+  --cloud-init infra/cloud-init/cloud-init.yaml \
+  --mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
+
+# 2. Get new IPs
+multipass list
+vim infra/ansible/inventories/hosts.ini
+
+# 3. Build JAR
+mvn clean package
+
+# 4. Run Ansible — rebuilds Docker, Java, Postgres, PgBouncer - and Deploy
+cd infra
+ansible-playbook ansible/playbooks/app-server.yml
+ansible-playbook --ask-vault-pass ansible/playbooks/db-server.yml
+# vault password: 123
+
+# 5. Verify
+ssh ubuntu@<ip>
+curl http://<ip>:8080/hello
+```
+
+---
+
+## Key takeaways
+
+- Spring Boot bundles Tomcat inside the JAR — no external server needed
+- `@RestController` replaces `web.xml` — one class, many endpoints
+- `application.properties` is loaded automatically from the classpath root
+- `java -jar` replaces `docker cp` and WAR deployment
+- `0.0.0.0` binding = reachable from any host on the same network

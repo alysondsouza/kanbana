@@ -7,4 +7,4 @@
   become: true        # run tasks as sudo
   roles:
     - docker          # install Docker first
-    - tomcat          # install tomcat
+    - java            # install openjdk:21

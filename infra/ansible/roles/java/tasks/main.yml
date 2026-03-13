@@ -1,0 +1,33 @@
+---
+# roles/java/tasks/main.yml
+# Runs the Spring Boot JAR inside an eclipse-temurin:21 container
+# Idempotent — safe to run multiple times
+
+- name: Create kanbana directory
+  file:
+    path: /opt/kanbana
+    state: directory
+    mode: '0755'
+
+- name: Create container (stopped)
+  docker_container:
+    name: kanbana
+    image: eclipse-temurin:21  # official OpenJDK — openjdk:21 is deprecated on Docker Hub
+    state: stopped             # create but do not start yet — JAR may not be there
+    restart_policy: always
+    volumes:
+      - /opt/kanbana:/opt/kanbana
+    ports:
+      - "8080:8080"
+    command: java -jar /opt/kanbana/kanbana.jar
+
+- name: Copy JAR to app-server
+  copy:
+    src: "{{ playbook_dir }}/../../../target/kanbana.jar"  # infra/ansible/playbooks/ → up 3 = repo root
+    dest: /opt/kanbana/kanbana.jar
+    mode: '0644'
+
+- name: Start container
+  docker_container:
+    name: kanbana
+    state: started             # JAR is guaranteed to be there now
