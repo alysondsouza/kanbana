@@ -661,12 +661,14 @@ source ~/.bashrc
 
 ---
 
-# Chapter 8 — Hello World WAR (Standalone Tomcat)
+---
+
+# Chapter 7 — Hello World WAR (Standalone Tomcat)
 
 ## Result
 - GET /hello → "Hello World from Tomcat!"
 - GET /bye   → "Ciao!"
-- Accessible from Windows browser at http://172.28.128.54:8080/hello
+- Accessible from Windows browser at http://<app-server-ip>:8080/hello
 - Tagged in Git: v1.0-tomcat
 
 ---
@@ -717,7 +719,7 @@ Browser: GET /hello
 
 ---
 
-## Deployment
+## Build and deploy
 
 ```bash
 # Build
@@ -742,11 +744,52 @@ curl http://localhost:8080/bye
 
 ---
 
+## Rebuild from scratch (VMs deleted or IPs changed)
+
+> IPs are assigned by DHCP — they change on every VM restart.
+> Always run multipass list to get current IPs before connecting.
+
+```bash
+# 0. Git
+git checkout v1.0-tomcat
+
+# 1. Launch VMs
+multipass launch -n app-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
+  --cloud-init infra/cloud-init/cloud-init.yaml \
+  --mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
+
+multipass launch -n db-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
+  --cloud-init infra/cloud-init/cloud-init.yaml \
+  --mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
+
+# 2. Get new IPs and update inventory
+multipass list
+vim infra/ansible/inventories/hosts.ini
+
+# 3. Run Ansible — rebuilds Docker, Tomcat, Postgres, PgBouncer
+cd infra
+ansible-playbook ansible/playbooks/app-server.yml
+ansible-playbook --ask-vault-pass ansible/playbooks/db-server.yml
+# vault password: 123
+
+# 4. Rebuild and redeploy WAR
+cd ~/kanbana
+mvn clean package
+scp target/ROOT.war ubuntu@<new-ip>:/tmp/
+ssh ubuntu@<new-ip>
+docker cp /tmp/ROOT.war tomcat:/usr/local/tomcat/webapps/ROOT.war
+curl http://localhost:8080/hello
+```
+
+---
+
 ## Issues encountered
 
 | Problem | Cause | Fix |
 |---|---|---|
 | BUILD FAILURE — war plugin | maven-war-plugin 2.2 incompatible with Java 21 | Pin maven-war-plugin to 3.4.0 in pom.xml |
+| 404 after redeploy | WAR in /tmp was stale from previous session | Always scp fresh WAR before docker cp |
+| No route to host | VM IP changed after restart (DHCP) | Run multipass list and update hosts.ini |
 
 ---
 
@@ -757,7 +800,3 @@ curl http://localhost:8080/bye
 - Tomcat auto-deploys WARs dropped into webapps/ — no restart needed
 - This approach is legacy but still common in enterprises
 - Spring Boot (Option B) solves the one-class-per-endpoint problem
-
-
-
-
