@@ -4,88 +4,40 @@
 
 # Chapter 9 — Kanbana REST API (Onion Architecture)
 
-## Checklist
+## Chapter 9 — Summary
 
-### 9.1 — Package structure
-> Set up the Onion layers before writing any code.
-- [x] Create packages: domain, application, infrastructure, api under com.kanbana
-- [x] Keep KanbanaApplication.java at the root (com.kanbana)
-- [x] Move AppController.java into the api package
-- [x] Keep application.properties (no change needed)
+**9.1 — Package Structure**
+> `domain`, `application`, `infrastructure`, `api` — set up before writing any code.
 
-### 9.2 — Dependencies
-> Add everything we need to pom.xml in one shot.
-- [x] Add spring-boot-starter-data-jpa
-- [x] Add postgresql driver (runtime scope)
-- [x] Add spring-boot-starter-flyway + flyway-database-postgresql
-- [x] Add spring-boot-starter-validation
-- [x] Add H2 (test scope)
-- [x] Add springdoc-openapi-starter-webmvc-ui (Swagger)
+**9.2 — Dependencies**
+> JPA, Postgres, Flyway, Validation, H2 (test only), Swagger — all in `pom.xml`.
 
-### 9.3 — Database migrations (Flyway)
-> Define the schema in versioned SQL files. Flyway runs these on startup.
-- [x] Create src/main/resources/db/migration/
-- [x] V0__create_schema.sql — creates kanbana schema
-- [x] V1__create_users.sql
-- [x] V2__create_boards.sql (FK → users)
-- [x] V3__create_columns.sql (FK → boards)
-- [x] V4__create_cards.sql (FK → board_columns)
-- [x] V5__remove_owner_fk.sql — drops boards_owner_id_fkey (no users until Phase 3)
-- [x] Run app and verify "Successfully applied 5 migrations to schema kanbana" in logs
+**9.3 — Database Migrations**
+> Five versioned SQL files. Flyway runs them on startup. Write-once — never edit an applied file.
 
-### 9.4 — Domain layer
-> Pure Java. No Spring, no JPA. This layer defines what the app IS.
-- [x] Create domain entity: User.java (POJO — no annotations)
-- [x] Create domain entity: Board.java
-- [x] Create domain entity: BoardColumn.java
-- [x] Create domain entity: Card.java
-- [x] Create repository interfaces (ports): BoardRepository, ColumnRepository, CardRepository
+**9.4 — Domain Layer**
+> Pure Java. No Spring, no JPA. Plain objects and repository interfaces only.
 
-### 9.5 — Infrastructure layer
-> This layer knows about the database so the domain does not have to.
-- [x] Create JPA entity: UserEntity.java (@Entity, @Table(schema="kanbana"), @Id)
-- [x] Create JPA entities: BoardEntity, BoardColumnEntity, CardEntity
-- [x] Create Spring Data repositories implementing domain interfaces
-- [x] Create mappers: domain object <-> JPA entity (ID set to null in toEntity())
+**9.5 — Infrastructure Layer**
+> The only layer that touches the database. Four classes per concept: entity, JPA repository, adapter, mapper.
 
-### 9.6 — Application layer (services)
-> Use cases and business logic live here. Services call domain repositories.
-- [x] Create request/response DTOs (CreateBoardRequestDTO, BoardResponseDTO, etc.)
-- [x] Add @NotBlank, @Size validation to request DTOs
-- [x] Create BoardService (createBoard, getBoard, listBoards, deleteBoard)
-- [x] Create ColumnService (addColumn, getColumnsByBoard, deleteColumn)
-- [x] Create CardService (createCard, updateCard, moveCard, deleteCard)
+**9.6 — Application Layer**
+> Services and DTOs. Business logic, validation, `id` and `createdAt` generated here.
 
-### 9.7 — API layer (controllers)
-> Controllers translate HTTP <-> service calls. Nothing else.
-- [x] Create BoardController — GET/POST /api/v1/boards, GET/DELETE /api/v1/boards/{id}
-- [x] Create ColumnController — POST/GET /boards/{boardId}/columns, DELETE /columns/{id}
-- [x] Create CardController — POST/GET /columns/{columnId}/cards, PATCH/DELETE /cards/{id}, PATCH /cards/{id}/move
-- [x] Create GlobalExceptionHandler (@RestControllerAdvice)
-- [x] Define ErrorResponseDTO record (status, message, timestamp)
+**9.7 — API Layer**
+> Controllers, exception handler, Swagger. Translates HTTP — nothing else.
 
-### 9.8 — Configuration & Running the Application
-> 12-Factor: all config from environment variables, no hardcoded values.
-- [x] Configure datasource in application.properties using ${DB_HOST}, ${DB_PORT}, ${DB_NAME} env vars
-- [x] Set spring.jpa.hibernate.ddl-auto=none (Flyway owns the schema)
-- [x] Set spring.flyway.default-schema=kanbana
-- [x] Create application-test.properties overriding datasource to H2 in-memory
+**9.8 — Configuration & Running**
+> `${VAR:default}` env vars for config. H2 for tests. Debugging commands for the full stack.
 
-### 9.9 — Tests
-> Unit tests for logic, integration tests for the full stack against H2.
-- [x] Unit test: BoardService (mock repository, test happy path + edge cases)
-- [x] Unit test: GlobalExceptionHandler error response shapes
-- [x] Integration test: BoardController (POST → 201, GET → 200, missing → 404)
-- [x] Integration test: validation (empty title → 400 with message)
-- [x] mvn test — all green
+**9.9 — Tests**
+> Mockito unit tests + MockMvc integration tests against H2. No VMs needed.
 
-### 9.10 — Deploy
-> Update Ansible to inject DB config, build, deploy, and verify end-to-end.
-- [x] Update Ansible appserver role: pass DB env vars to the Docker container
-- [x] Encrypt DB credentials with Ansible Vault
-- [x] mvn clean package && ansible-playbook app-server.yml
-- [x] Smoke test: POST a board via HTTP, verify row in Postgres on db-server
-- [x] git tag v2.0-rest-api && git push
+**9.10 — Deploy**
+> `deploy.yml` ships every release — JAR, config, restart, health check. Tagged `v2.0-rest-api`.
+
+**9.11 — Rebuild from Scratch**
+> Launch VMs → update IPs → provision → test → package → deploy.
 
 ---
 
@@ -316,36 +268,6 @@ curl http://localhost:8080/hello
 Nothing functionally changes in 9.1. We are only reorganising.
 If the app breaks, check the package declaration in AppController.java first.
 
-### Running locally vs on the server
-
-```
-Option A — Local (WSL)
-─────────────────────────────────────────
-WSL
- └── Java 21 (installed directly)
-      └── mvn spring-boot:run
-           └── starts embedded Tomcat on port 8080
-                └── curl localhost:8080/hello ✅
-
-Option B — Server (Ansible)
-──────────────────────────────────────────
-app-server VM
- └── Docker
-      └── eclipse-temurin:21 container
-           └── java -jar kanbana.jar
-                └── starts embedded Tomcat on port 8080
-                     └── curl <vm-ip>:8080/hello ✅
-```
-
-Both run the same JAR and the same embedded Tomcat.
-The difference is only where Java lives.
-
-- Local: Java is in WSL. `mvn spring-boot:run` compiles and runs in one step.
-- Server: Java is in a Docker container. Ansible copies the built JAR and starts it.
-
-⚠️ Once datasource config is added in 9.8, running locally will try to connect to Postgres.
-It will fail unless you pass env vars pointing at db-server, or have Postgres running locally.
-
 ---
 
 ## 9.2 — Dependencies
@@ -381,11 +303,7 @@ the Spring Boot parent POM manages them automatically (except springdoc).
    automatically from your controllers. Version must be specified — not managed by
    Spring Boot parent POM.
 
-### Verify
-
-```bash
-mvn dependency:tree | grep -E "jpa|postgresql|flyway|validation|h2|springdoc"
-```
+Verify: `mvn dependency:tree | grep -E "jpa|postgresql|flyway|validation|h2|springdoc"`
 
 ---
 
@@ -786,12 +704,12 @@ anything about HTTP. The API layer decides what HTTP status those exceptions bec
 | Code | Meaning | Where it comes from |
 |---|---|---|
 | 200 OK | Successful GET or PATCH | `ResponseEntity.ok(dto)` in controller |
-| 201 Created | Successl POST | `ResponseEntity.status(HttpStatus.CREATED).body(dto)` |
+| 201 Created | Successful POST | `ResponseEntity.status(HttpStatus.CREATED).body(dto)` |
 | 204 No Content | Successful DELETE | `ResponseEntity.noContent().build()` |
 | 400 Bad Request | Validation failed | `GlobalExceptionHandler` catches `MethodArgumentNotValidException` |
 | 404 Not Found | Resource does not exist | `GlobalExceptionHandler` catches `EntityNotFoundException` |
 | 500 Internal Error | Unhandled exception | `GlobalExceptionHandler` catch-all |
-| 403 Forbidden | Not authorised | Spring Security — Phase 3, not yet ilemented |
+| 403 Forbidden | Not authorised | Spring Security — Phase 3, not yet implemented |
 
 ### Key annotations
 
@@ -805,7 +723,7 @@ anything about HTTP. The API layer decides what HTTP status those exceptions bec
 
 **`@RequestBody`** — deserialises JSON into a DTO object (Jackson).
 
-**`@Valid`** — trlidation on the DTO. If any constraint fails, Spring throws
+**`@Valid`** — triggers Bean Validation on the DTO. If any constraint fails, Spring throws
 `MethodArgumentNotValidException` before the method runs. `GlobalExceptionHandler` catches it → 400.
 
 **`@RestControllerAdvice`** — marks `GlobalExceptionHandler` as a global interceptor.
@@ -819,7 +737,7 @@ POST /api/v1/boards  {"title": ""}
          ↓
   @NotBlank fails     Spring throws MethodArgumentNotValidException
          ↓
-  GlobalExcepr  catches it, returns:
+  GlobalExceptionHandler  catches it, returns:
          ↓
   400 Bad Request  {"status": 400, "message": "title: Board title must not be blank", "timestamp": "..."}
 ```
@@ -838,7 +756,7 @@ Swagger automatically generates interactive API documentation from your controll
 </dependency>
 ```
 
-No Java conf needed — Spring Boot auto-detects springdoc on the classpath.
+No Java config needed — Spring Boot auto-detects springdoc on the classpath.
 
 Open in Windows browser after starting the app:
 ```
@@ -860,13 +778,13 @@ The `${VAR:default}` syntax means: use the env var if set, fall back to the defa
 ### application.properties
 
 ```properties
-# ── Datasource ────────â────────────────────────────────────────────
+# ── Datasource ────────────────────────────────────────────────────────────────
 # Connects via PgBouncer (port 6432) — never directly to Postgres (5432)
 # ${VAR:default} — uses env var if set, falls back to default for local dev
 spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:6432}/${DB_NAME:kanbana}
 spring.datasource.username=${DB_USER:kanbana}
 spring.datasource.password=${DB_PASSWORD:secret}
-spring.datasource.driver-class-nesql.Driver
+spring.datasource.driver-class-name=org.postgresql.Driver
 
 # ── Flyway ────────────────────────────────────────────────────────────────────
 # Runs migrations on startup — creates all tables before Hibernate sees the schema
@@ -874,16 +792,16 @@ spring.flyway.enabled=true
 spring.flyway.locations=classpath:db/migration
 spring.flyway.default-schema=kanbana
 
-# ── JPA / Hibernate ──────────────────â────────────────────────────────
+# ── JPA / Hibernate ───────────────────────────────────────────────────────────
 # none — Flyway owns the schema entirely. This is correct long-term, not a workaround.
-# Flyway guarantees schema correctness via checksums — Hibernate validation is redundant
+# Flyway guarantees schema cochecksums — Hibernate validation is redundant
 # and causes startup ordering failures on empty databases.
 spring.jpa.hibernate.ddl-auto=none
 spring.jpa.open-in-view=false
 spring.jpa.show-sql=false
 spring.jpa.properties.hibernate.default_schema=kanbana
 
-# ── DEBUG ───â───────────────────────────────────────────────────────────────
+# ── DEBUG ─────────────────────────────────────────────────────────────────────
 # Uncomment these when you get a 500 or unexpected behaviour — check the app logs
 # spring.jpa.show-sql=true
 # logging.level.com.kanbana=DEBUG
@@ -894,21 +812,21 @@ spring.jpa.properties.hibernate.default_schema=kanbana
 
 ```properties
 # Test profile — overrides application.properties for mvn test
-# H2 in-memdatabase — no Postgres needed, Flyway runs migrations against H2
+# H2 in-memory database — no Postgres needed, Flyway runs migrations against H2
 
-# ── Datasource ────────────────────────────────────────────────────────────────
+# ── Datasource ─────────────────────────────────────────────â─────────────
 # MODE=PostgreSQL makes H2 behave like Postgres (same SQL syntax)
 # DB_CLOSE_DELAY=-1 keeps the database alive for the full test run
 spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
-spring.datasource.drives-name=org.h2.Driver
+spring.datasource.driver-class-name=org.h2.Driver
 spring.datasource.username=sa
 spring.datasource.password=
 
-# ── JPA / Hibernate ───────────────────────────────────────────────────────────
+# ── JPA / Hibernate ──────────────────────────────────────────â───────────
 # none — Flyway handles all schema creation, Hibernate makes no changes
 spring.jpa.hibernate.ddl-auto=none
 
-# ── Flyway ──────────────────────────────────â────────────────────────────
+# ── Flyway ────────────────────────────────────────────────────────────────────
 # Runs the real migration files against H2 — same schema as production
 spring.flyway.enabled=true
 ```
@@ -917,14 +835,17 @@ spring.flyway.enabled=true
 
 ### Debugging
 
-Before running the app, verify the infrastructure is healthy.
+Before running the ify the infrastructure is healthy.
 Work through these checks in order — network → Docker → PgBouncer → Postgres → Flyway.
 
 #### Maven
 
 ```bash
 # Check Flyway and autoconfigure versions resolved correctly
-mvn dependency:tree | grep -i "flyway\|boot-autoconfigure"#### Network — from WSL
+mvn dependency:tree | grep -i "flyway\|boot-autoconfigure"
+```
+
+#### Network — from WSL
 
 ```bash
 # Check db-server VM IP (changes on every restart)
@@ -940,7 +861,7 @@ ip route
 #### Docker — inside db-server VM
 
 ```bash
-# Both postgres and pgbouncer must show Up
+# Both postncer must show Up
 docker ps
 
 # Start containers if stopped
@@ -951,7 +872,7 @@ docker start pgbouncer
 docker network inspect kanbana-net
 
 # Reconnect a container if missing from the network
-docker network connect kanbnet pgbouncer
+docker network connect kanbana-net pgbouncer
 ```
 
 #### PgBouncer — inside db-server VM
@@ -963,7 +884,7 @@ docker exec -it pgbouncer netstat -tlnp
 # Check logs for auth errors
 docker logs pgbouncer
 
-# Test PgBouncer connection
+# Test PgBounconnection
 docker exec -it pgbouncer psql -h pgbouncer -p 6432 -U kanbana -d kanbana -c "SELECT 1"
 ```
 
@@ -974,7 +895,7 @@ docker exec -it pgbouncer psql -h pgbouncer -p 6432 -U kanbana -d kanbana -c "SE
 docker logs postgres
 
 # Test direct connection
-docker exec -it postgres psql -U kanbana -d kanbana -ECT 1"
+docker exec -it postgres psql -U kanbana -d kanbana -c "SELECT 1"
 
 # List databases
 docker exec -it postgres psql -U kanbana -d kanbana -c "\l"
@@ -983,7 +904,7 @@ docker exec -it postgres psql -U kanbana -d kanbana -c "\l"
 docker exec -it postgres psql -U kanbana -d kanbana -c "\dn"
 
 # List tables in kanbana schema
-docker exec -it postgres psql -U kanbana -d kanbana -c "\dt kanbana.*"
+docker ec -it postgres psql -U kanbana -d kanbana -c "\dt kanbana.*"
 
 # Check nothing landed in public schema by mistake
 docker exec -it postgres psql -U kanbana -d kanbana -c "\dt"
@@ -992,20 +913,44 @@ docker exec -it postgres psql -U kanbana -d kanbana -c "\dt"
 #### Flyway — inside db-server VM
 
 ```bash
-# Check migration history — all 6 rows shoshow success = t
+# Check migration history — all 6 rows should show success = t
 docker exec -it postgres psql -U kanbana -d kanbana \
   -c "SELECT version, description, success FROM kanbana.flyway_schema_history;"
 ```
 
 ---
 
-### Running locally
+### Running locally vs on the server
+
+```
+Option A — Local (WSL)
+───────────────────────────
+WSL
+ └── Java 21 (installed directly)
+      └── mvn spring-boot:run
+           └── starts embedded Tomcat on port 8080
+                └── curl localhost:8080/hello ✅
+
+Option B — Server (Ansible)
+──────────────────────────────────────────
+app-server VM
+ └── Docker
+      └── eclipse-temurin:21 container
+           └ kanbana.jar
+                └── starts embedded Tomcat on port 8080
+                     └── curl <vm-ip>:8080/hello ✅
+```
+
+Both run the same JAR and the same embedded Tomcat. The difference is only where Java lives.
+Local: `mvn spring-boot:run` compiles and runs in one step. Server: Ansible copies the built JAR and starts it in a container.
+
+⚠️ Running locally requires DB env vars — the app will try to connect to Postgres on startup.
 
 ```bash
 # Get current db-server IP
 multipass list
 
-# Run the app
+n the app
 DB_HOST=<db-server-ip> DB_PASSWORD=<password> mvn spring-boot:run
 ```
 
@@ -1018,14 +963,14 @@ fuser -k 8080/tcp    # kill it
 ### Verify — startup logs
 
 ```
-Successfully validated 6 migraons           ← Flyway checksums OK
+Successfully validated 6 migrations           ← Flyway checksums OK
 Schema "kanbana" is up to date                ← no new migrations needed
 Tomcat started on port 8080                   ← app is up
 ```
 
 On first run against a fresh database:
 ```
-Creating schema "kanbana"
+Creating schemna"
 Successfully applied 5 migrations to schema "kanbana"
 ```
 
@@ -1038,7 +983,7 @@ Successfully applied 5 migrations to schema "kanbana"
 curl -X POST http://localhost:8080/api/v1/boards \
   -H "Content-Type: application/json" \
   -d '{"title": "My First Board"}'
-# Expected: 201 Created + JSONid, title, ownerId, createdAt
+# Expected: 201 Created + JSON with id, title, ownerId, createdAt
 
 # Verify the row landed in Postgres
 docker exec -it postgres psql -U kanbana -d kanbana \
@@ -1058,14 +1003,14 @@ http://localhost:8080/hello   ← Hello World smoke test
 
 ---
 
-### 9.8.1 —er
+### 9.8.1 — Swagger
 
 Swagger automatically generates interactive API documentation from your controllers.
 No extra Java config needed — Spring Boot auto-detects `springdoc` on the classpath.
 
 **What was needed:**
 
-1. Add to `pom.xml` (version must be explicit — not managed by Spring Boot parent):
+1. Add to `pom.xml` (version muslicit — not managed by Spring Boot parent):
 ```xml
 <dependency>
     <groupId>org.springdoc</groupId>
@@ -1076,49 +1021,49 @@ No extra Java config needed — Spring Boot auto-detects `springdoc` on the clas
 
 2. Open in browser:
 ```
-http://localhost:8080/swagger-ui.
+http://localhost:8080/swagger-ui.html
 ```
 
 All endpoints are grouped by controller. Expand any endpoint, fill in parameters,
 and click Execute — it sends a real HTTP request to your running app.
 
-**Every request is real** — Swagger hits your actual running app and writes to the
+**Every request is real** — Swagger hits your actual running app and wri the
 actual database. It is not a simulation.
 
 **The two response codes shown** — Swagger documents all possible responses for an
 endpoint. The one that actually fired (e.g. `201 Created`) is the real result.
-The others (e.g. `200 OK`) are just schema documentation shohat the endpoint
+The others (e.g. `200 OK`) are just schema documentation showing what the endpoint
 could return. Ignore everything except the one that matches your actual response.
 
 **Reading the curl Swagger generates:**
 ```bash
 curl -X 'POST' \
   'http://localhost:8080/api/v1/boards' \
-  -H 'accept: */*' \          ← tells the server you accept any response format
+  -H 'accept: */*' \        ← tells the server you accept any response format
   -H 'Content-Type: application/json' \
   -d '{"title": "Aly"}'       ← -d = data = the request body
 ```
 
 **What Swagger is good for:**
 - Quickly testing endpoints while developing
-- Seeing all endpoints in one place withir expected inputs and outputs
+- Seeing all endpoints in one place with their expected inputs and outputs
 - Sharing API documentation — teammates can read and test without writing code
 
 **What Swagger is not good for:**
 - Saving and reusing requests
 - Running multiple requests in sequence
-- Automated or authenticated testing (limitations with auth headers)
+- Automated or aicated testing (limitations with auth headers)
 
 **Happy path test sequence — verified end to end:**
 
 1. `POST /api/v1/boards` → 201, board written to `kanbana.boards`
 2. `POST /api/v1/boards/{id}/columns` → 201, column linked to board, position = 0
-3. `POST /api/v1/cid}/cards` → 201, card linked to column
+3. `POST /api/v1/columns/{id}/cards` → 201, card linked to column
 4. `GET /api/v1/boards/{id}` → 200, board retrieved
 5. `DELETE /api/v1/boards/{id}` → 204, board and all children deleted via CASCADE
 
 ```
-HTTP → Controller → Service → Repository → Postgres → back up
+HTTP → Controller → Service → Repository Postgres → back up
 ```
 
 ⚠️ When using `{id}` parameters, paste the exact UUID from the previous response
@@ -1128,41 +1073,78 @@ including all dashes. Swagger may pre-fill the field with placeholder text.
 
 ### 9.8.2 — Postman
 
-Postman is a tool for manually testing your API.
-Open it, tyRL, choose a verb (GET/POST/PATCH/DELETE), add a body, hit Send.
-Think of it as a browser that can send any HTTP request — not just GET.
+Postman is a tool for manually testing your API — think of it as a browser that can send any HTTP verb (GET, POST, PATCH, DELETE), not just GET. The key advantage over Swagger is that requests are saved in a **collection** and can be chained into a flow.
 
-**The key difference from Swagger** — Postman saves your requests in a **collection**.
-You build them once and re-run them anytime, without the app needing to be running
-to see the documentation.
+Download: `https://www.postman.com/do
+---
 
-**Getting started:**
-1. Download and install from `https://www.postman.com/downloads/`
-2. Create a free account (or skip login)
-3. Click **New → Collection** → name it "
-4. Click **New → HTTP Request**
-5. Set method to `POST`, URL to `http://localhost:8080/api/v1/boards`
-6. Click **Body → raw → JSON**, paste `{"title": "My Board"}`
-7. Click **Send** → you get the response back
-8. Click **Save** — the request is now stored in your collection
+**Current setup — `kanbana` collection:**
 
-**The real power — chaining requests with variables:**
+Environment: `kanbana-appserver`
+
+| Variable | Value | Set by |
+|---|---|---|
+| `base_url` | `http://<app-server-ip>:8080` | Manually |
+| `board_id` | UUID of last created board | POST script |
+
+---
+
+**Single request — POST a board:**
+
 ```
-1. POST /api/v1/boards           → save returned id as {{boardId}}
-2. POST /api/v1/boards/{{boardId}}/columns  → use it automatically
-3. POST /api/v1/columns/{{columnId}}/cards  → chain further
+Method: POST
+URL:    {{base_url}}/api/v1/boards
+Body:   raw → JSON
+        {"title": "My Board"}
 ```
 
-Postman can extract values from one response and pass them to the next request
-automatically using environment variables — no manual copy-pasting of UUIDs.
+Expected response — 201:
+```json
+{
+  "id": "cf9716e2-...",
+  "title": "My Board",
+  "ownerId": "...",
+  "createdA"
+}
+```
 
-**When to use Postman over Swagger:**
-- When you want to save and replay a sequence of requests
-- When testing authenticated endpoints (auth headers are easier to manage)
-- When you want to share a test collection with teammates
-- Phase 3 onwards — Swagger has limitations with JWT auth headers
+---
 
-**For now** â is sufficient. Postman becomes essential in Phase 3.
+**Sequence Test — Boards folder:**
+
+```
+POST   {{base_url}}/api/v1/boards           → creates board, sets {{board_id}}
+GET    {{base_url}}/api/v1/boards/:id       → retrieves board
+DELETE {{base_url}}/api/v1/boards/:id       → deletes board
+```
+
+Post-response script on `POST /boards` — captures the board ID automatically:
+```javascript
+const json = pm.response.json();
+pm.environment.set("board_id", json.id);
+```
+
+Set `:id` path variable to `{{board_id}}` on GET and DELETE — no manuing.
+
+**Run the sequence:** Kanbana collection → Run → POST → GET → DELETE → Start Run.
+
+---
+
+**Still to add** — same pattern for Columns and Cards:
+
+```
+POST   {{base_url}}/api/v1/boards/{{board_id}}/columns    → sets {{column_id}}
+GET    {{base_url}}/api/v1/boards/{{board_id}}/columns
+DELETE {{base_url}}/api/v1/columns/{{column_id}}
+
+POST   {{base_url}}/api/v1/columns/{{column_id}}/cards    → sets {{card_id}}
+GET    {{base_url}}/api/v1/columns/{{column_id}}/cards
+PATCH  {{base_url}}/api/v1/cards/{{card_id}}
+DELETE {{base_url}}/api/v1/cards/{{card_id}}
+PATCH  {{base_url}}/api/v1/cards/{{card_id}}/move
+```
+
+**When to use Postman over Swagger:** when testing sequences, when managing auth headers (Phase 3), or when sharing a test collection with teammates.
 
 ---
 
@@ -1174,147 +1156,13 @@ automatically using environment variables — no manual copy-pasting of UUIDs.
 
 ### Key concepts
 
-**What is H2?**
+**H2** is an in-memory database that lives entirely in RAM — no Docker, no Postgres, no network. `application-test.propes` points Spring to it during tests. Flyway runs the real migration files against H2 on startup, giving each test run a fresh schema identical to production.
 
-H2 is an in-memory database written in Java. It starts when the JVM starts and disappears when the JVM stops. No Docker, no Postgres, no network — it lives entirely in RAM.
+**MockMvc** simulates HTTP requests through the full stack — `DispatcherServlet` → `Controller` → `Service` → `Repository` → H2. No real HTTP port is opened.
 
-`application-test.properties` tells Spring to use H2 instead of Postgres during tests:
-```properties
-spring.datasource.url=jdbc:h2:mem:testdb;MPostgreSQL
-```
-`MODE=PostgreSQL` makes H2 understand most Postgres SQL syntax. However some Postgres-specific features do not work in H2 — discovered during this project:
-- `gen_random_uuid()` → replace with no default, generate UUID in Java instead
-- `PRIMARY KEY DEFAULT <fn>()` → H2 does not support inline defaults after `PRIMARY KEY`
-- Named FK constraints (e.g. `boards_owner_id_fkey`) → H2 auto-names constraints differently
-- `DROP CONSTRAINT <named>` → fails if the name doesn't match H2's autd name
+**Hamcrest** is a matcher library for readable assertions. `containsString("title")` checks a string contains a word without caring about the rest — makes tests less brittle than exaertions.
 
-Flyway runs the real migration files against H2 on startup — same schema as production.
-Each test run gets a fresh empty database.
-
-**How does the integration test write to the DB?**
-
-`MockMvc` simulates an HTTP request → hits the real `DispatcherServlet` → calls the real `BoardController` → calls the real `BoardService` → calls the real `BoardRepositoryAdapter` → runs a real SQL INSERT into H2. The full stack runs, just with H2 instead of Postgres and no real HTTP port open.
-
-**What is 
-Hamcrest is a matcher library for readable assertions. MockMvc's `jsonPath()` integrates with it:
-```java
-.andExpect(jsonPath("$.message").value(containsString("title")))
-```
-`containsString("title")` checks the message contains the word "title" without caring about the rest. This makes tests less brittle — the exact wording can change as long as the field name still appears.
-
-**What is a bean?**
-
-A bean is any object that Spring creates and manages. When you annotate a class with `@Service`, `@Repositor, or `@RestController`, Spring creates one instance at startup and stores it in the **application context** — essentially a map of beans.
-
-`@Autowired` asks Spring to look up the matching bean and inject it. This is Dependency Injection.
-
-Spring Boot 4 no longer registers `com.fasterxml.jackson.databind.ObjectMapper` as a bean (replaced by Jackson 3's `tools.jackson.databind.json.JsonMapper`). That's why the integration test uses `new ObjectMapper()` directly instead of `@Autowired`.
-
----
-
-### Two categors
-
-**Unit tests** — test one class in isolation. No Spring context, no database, no network.
-Fast (milliseconds). Use JUnit 5 + Mockito to replace real dependencies with fakes.
-
-**Integration tests** — start a real Spring context with H2 in-memory database.
-Flyway runs the real migration files against H2 on startup — same schema as production.
-Slower (seconds), but test the full request-to-response path.
-
----
-
-### Files to create
-
-```
-src/test/java/com/kanbana/
-    application/service/BoardServiceTest    ← unit test
-    api/GlobalExceptionHandlerTest.java           ← unit test
-    api/BoardControllerTest.java                  ← integration test
-```
-
----
-
-### Unit test: BoardServiceTest
-
-**Class under test:** `BoardService`
-**Dependencies mocked:** `BoardRepository` (via `@Mock`)
-**Framework:** JUnit 5 + Mockito (`@ExtendWith(MockitoExtension.class)`)
-
-**Walkthrough:**
-- `@ExtendWith(MockitoExtension.class)` — plugs Mockito into JUnit 5. Without this, `@Mock` is ignored.
-- `@Mock` — creates a fRepository`. Every method returns null/empty by default. No database is touched.
-- `@InjectMocks` — creates a real `BoardService` and injects the mock into it via constructor injection.
-- `when(...).thenAnswer(...)` — stubs the fake to return a specific value when called.
-- `verify(..., never())` — asserts a method was never called. Used to confirm guard clauses work.
-
-**Common mistake:** forgetting `@ExtendWith` — your mocks silently stay null and you get `NullPointerException`.
-
-Cases:
-- `createBopy path → `boardRepository.save()` is called, returned DTO has correct title
-- `getBoardById` found → returns DTO
-- `getBoardById` not found → throws `EntityNotFoundException`
-- `deleteBoard` happy path → `boardRepository.deleteById()` is called
-- `deleteBoard` not found → throws `EntityNotFoundException`
-
----
-
-### Unit test: GlobalExceptionHandlerTest
-
-**Class under test:** `GlobalExceptionHandler`
-**Framework:** `MockMvc` in standalone mode (no Spring context — just the handler wired up)
-
-**Whnt from BoardServiceTest:**
-`BoardServiceTest` tested pure Java logic — no HTTP at all. Here we need HTTP because `GlobalExceptionHandler` only activates when an exception bubbles up through Spring MVC's request pipeline. `MockMvcBuilders.standaloneSetup()` builds a fake DispatcherServlet with only what you give it — no DB, no full context. A `FakeController` inner class triggers specific exceptions on demand.
-
-Cases:
-- `EntityNotFoundException` thrown → response is 404, body has `status=404` and corressage`
-- `MethodArgumentNotValidException` triggered → response is 400, body has `status=400`
-- The 500 test asserts the message is a safe generic string, not the real exception message — explicit OWASP security check.
-
----
-
-### Integration test: BoardControllerTest
-
-**What makes this different from the previous two tests:**
-
-`@SpringBootTest` starts the entire application — all beans, all layers, Flyway runs migrations against H2, everything wires together. When `mockMvc.perform(post(...))` runs, thest travels through the real `DispatcherServlet` → `BoardController` → `BoardService` → `BoardRepositoryAdapter` → H2.
-
-Spring Boot 4 removed `@AutoConfigureMockMvc` and `@WebMvcTest` from the test-autoconfigure jar. Instead, MockMvc is built manually from the `WebApplicationContext`:
-```java
-MockMvcBuilders.webAppContextSetup(context).build()
-```
-
-`ObjectMapper` is no longer a Spring bean in Boot 4 — instantiate directly: `new ObjectMapper()`.
-
-Cases:
-- `POST /api/v1/boards` with valid body → 2y contains `id` and `title`
-- `GET /api/v1/boards/{id}` with existing id → 200
-- `GET /api/v1/boards/{id}` with random UUID → 404
-- `POST /api/v1/boards` with blank title → 400, error body contains `"title"`
-
----
-
-### H2 compatibility fixes applied to migrations
-
-H2 does not support all Postgres SQL. These changes were required to make migrations run on both:
-
-| Original (Postgres only) | Fixed (works on both) |
-|---|---|
-| `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | `UUID PRIMARY KEY` — UUID genn Java |
-| `NOW()` | `CURRENT_TIMESTAMP` |
-| Named FK constraint in V2 | Removed — FK enforced at application layer |
-| `V5__remove_owner_fk.sql` drops named constraint | Emptied — FK was removed from V2 |
-
----
-
-### Spring Boot 4 breaking changes encountered
-
-| Change | Impact | Fix |
-|---|---|---|
-| `@AutoConfigureMockMvc` removed | Integration test won't compile | Use `MockMvcBuilders.webAppContextSetup()` |
-| `ObjectMapper` no longer a bean | `@Autowired ObjectMapper` fails | Use `new ObjectMapper()`ectly |
-| Jackson 3 (`tools.jackson.*`) is primary | `com.fasterxml.*` ObjectMapper not registered | Same fix as above |
-| `spring-boot-starter-webmvc-test` doesn't exist | Wrong dependency in pom.xml | Replace with `spring-boot-starter-test` |
+**A bean** is any object Spring creates and manages. `@Service`, `@Repository`, `@RestController` register beans into the application context. `@Autowired` injects them. Spring Boot 4 no longer registers `ObjectMapper` as a bean — use `new ObjectMapper()` directly in tests.
 
 ---
 
@@ -1324,7 +1172,7 @@ Run a single test class:
 ```bash
 mvn test -pl . -Dtest=BoardServiceTest
 mvn test -pl . -Dtest=GlobalExceptionHandlerTest
-mvn clean test -pl . -Dtest=BoardControllerTest   # clean required after migration file changes
+mvn clean test -pl . -Dtest=BoardControllerTest   # clean required after miation file changes
 ```
 
 Force download test dependencies if compilation fails:
@@ -1337,24 +1185,7 @@ Run all tests:
 mvn test
 ```
 
-⚠️ `mvn clean test` (all tests) may fail if `KanbanaApplicationTests` tries to start with Postgres env vars missing. Fix: annotate `KanbanaApplicationTests` with `@ActiveProfiles("test")` so it uses H2.
-
----
-
-### Note on scope
-
-`ColumnServiceTest` and `CardServiceTest` follow the exact same pattern as `BoardServiceTest`.
-Write those yourself after `BoardServiceTest` is green — tucture is identical.
-
----
-
-### Checklist
-
-- [x] `BoardServiceTest` — unit, all 5 cases green
-- [x] `GlobalExceptionHandlerTest` — unit, 404 and 500 cases green
-- [x] `BoardControllerTest` — integration, all 4 cases green
-- [x] `KanbanaApplicationTests` annotated with `@ActiveProfiles("test")`
-- [x] `mvn test` — all green, no failures
+⚠️ `mvn test` requires `KanbanaApplicationTests` to be annotated with `@ActiveProfiles("test")` — otherwise Spring tries to connect to Postgres and fails.
 
 ---
 
@@ -1364,9 +1195,7 @@ Write those yourself after `BoardServiceTest` is green — tucture is identical.
 
 ---
 
-### How Spring Boot finds `appliperties`
-
-Spring Boot checks config locations in this order — later entries win:
+### How Spring Boot finds `application.properties` Boot checks config locations in this order — later entries win:
 
 ```
 1. classpath:/                    ← inside the JAR (local dev defaults)
@@ -1375,7 +1204,7 @@ Spring Boot checks config locations in this order — later entries win:
 4. file:./config/
 ```
 
-The container runs `java -jar /opt/kanbana/kanbana.jar` from `/opt/kanbana/`. Ansible writes `application.properties` to `/opt/kanbana/application.properties`. Spring Boot finds it at `file:./` and uses it instead of thd one. The JAR stays generic — no environment-specific config baked in.
+The container runs `java -jar /opt/kanbana/kanbana.jar` from `/opt/kanbana/`. Ansible writes `application.properties` to `/opt/kanbana/application.properties`. Spring Boot finds it at `file:./` and uses it instead of the bundled one. Ttays generic — no environment-specific config baked in.
 
 **Two `application.properties` files — different purposes:**
 
@@ -1385,8 +1214,7 @@ src/main/resources/application.properties     ← bundled in JAR, local dev
                                                  committed to git
 
 infra/ansible/roles/appserver/templates/      ← Ansible template, deployed to server
-    application.properties                       uses {{ var substitution
-                                                 real values written at deploy time
+    application.properties                       uses {{ variable }} substit                                               real values written at deploy time
                                                  never committed with real secrets
 ```
 
@@ -1403,8 +1231,8 @@ infra/ansible/
     inventories/
         hosts.ini
         group_vars/
-          all/
-                vars.yml        ← db_name, db_user, jdbc_url
+            all/
+              vars.yml        ← db_name, db_user, jdbc_url
                 vault.yml       ← db_password (encrypted)
     roles/
         docker/                 ← unchanged
@@ -1416,13 +1244,12 @@ infra/ansible/
                 application.properties   ← Ansible template
     playbooks/
         app-server.yml          ← unchanged
-        db-server ← unchanged
-        deploy.yml              ← new
+        db-server.yml           â   deploy.yml              ← new
 ```
 
 ---
 
-### deploy.yml — explained
+### Step 1 — deploy.yml
 
 File: `infra/ansible/playbooks/deploy.yml`
 
@@ -1439,7 +1266,8 @@ Tasks:
 
 ```bash
 # Build JAR
-cd ~/kanbean package -DskipTests
+cd ~/kanbana
+mvn clean packageests
 
 # Deploy
 cd infra
@@ -1462,7 +1290,7 @@ docker exec -it postgres psql -U kanbana -d kanbana \
   -c "SELECT * FROM kanbana.boards;"
 ```
 
-Expected: POST returns 201 with JSON body coaining `id` and `title`. SELECT returns one row.
+Expected: POST returns 201 with JSON body containing `id` and `tle`. SELECT returns one row.
 
 ---
 
@@ -1487,8 +1315,8 @@ Run from PowerShell or WSL:
 
 ```bash
 multipass launch -n app-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
-  --cloud-init infra/cloud-initud-init.yaml \
-  --mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
+  --cloud-init infra/cloud-init/cloud-init.yaml \
+mount C:/Users/alyso/multipass_mount:/mnt/multipass_mount
 
 multipass launch -n db-server --network Ethernet --cpus 2 --memory 2G --disk 10G \
   --cloud-init infra/cloud-init/cloud-init.yaml \
@@ -1511,9 +1339,9 @@ Update both `ansible_host=` values.
 ### Step 3 — Provision infrastructure
 
 ```bash
-cd ~bana/infra
+cd ~/kanbana/infra
 
-# Install Docker + create container skeleton on app-server
+# Ill Docker + create container skeleton on app-server
 ansible-playbook ansible/playbooks/app-server.yml
 
 # Install Docker + run Postgres + PgBouncer on db-server
@@ -1526,6 +1354,7 @@ ansible-playbook ansible/playbooks/db-server.yml --ask-vault-pass
 
 ```bash
 cd ~/kanbana
+mvn test
 mvn clean package -DskipTests
 ```
 
@@ -1538,7 +1367,7 @@ cd infra
 ansible-playbook --ask-vault-pass ansible/playbooks/deploy.yml
 ```
 
-This copies the JAR, writes `application.properties` with  DB credentials, restarts the container, and waits for the health check to pass.
+This copies the JAR, writes `application.properties` with real DB crtials, restarts the container, and waits for the health check to pass.
 
 ---
 
@@ -1546,6 +1375,7 @@ This copies the JAR, writes `application.properties` with  DB credentials, resta
 
 ```bash
 # POST a board
+multipass shell app-server
 curl -s -X POST http://<app-server-ip>:8080/api/v1/boards \
   -H "Content-Type: application/json" \
   -d '{"title":"Rebuild Test"}' | jq
@@ -1560,7 +1390,7 @@ docker exec -it postgres psql -U kanbana -d kanbana \
 
 ### Notes
 
-- Flyway runs automatically on startup — schema is recreated from migration a fresh DB
+- Flyway runs automatically on startup — schema is recreatrom migrations on a fresh DB
 - Data does not survive VM deletion — the Docker volume is gone with the VM
 - IPs are DHCP — always run `multipass list` and update `hosts.ini` before running any playbook
 - Vault password is required for `db-server.yml` and `deploy.yml`
