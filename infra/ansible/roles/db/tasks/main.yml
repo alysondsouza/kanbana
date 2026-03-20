@@ -21,7 +21,7 @@
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"         # internal only — apps should never connect directly to Postgres
+      - "5432:5432"
     env:
       POSTGRES_DB: "{{ db_name }}"
       POSTGRES_USER: "{{ db_user }}"
@@ -30,7 +30,7 @@
 - name: Run PgBouncer container
   docker_container:
     name: pgbouncer
-    image: edoburu/pgbouncer:v1.25.1-p0  # pgbouncer/pgbouncer is abandoned — edoburu is actively maintained
+    image: edoburu/pgbouncer:v1.25.1-p0
     state: started
     restart_policy: always
     networks:
@@ -43,6 +43,8 @@
       DB_NAME: "{{ db_name }}"
       DB_USER: "{{ db_user }}"
       DB_PASSWORD: "{{ db_password }}"
+      LISTEN_PORT: "6432"               # port PgBouncer listens on inside the container
+      AUTH_TYPE: "scram-sha-256"        # must match Postgres password encryption method
       POOL_MODE: transaction            # most efficient pool mode for web apps
       MAX_CLIENT_CONN: "100"
       DEFAULT_POOL_SIZE: "20"

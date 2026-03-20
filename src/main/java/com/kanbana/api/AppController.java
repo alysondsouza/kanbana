@@ -1,4 +1,4 @@
-package com.kanbana;
+package com.kanbana.api;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

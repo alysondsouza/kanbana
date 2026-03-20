@@ -1,0 +1,61 @@
+---
+# playbooks/deploy.yml
+# Deploys the kanbana JAR to app-server and applies production config
+#
+# Run with:
+#   cd infra
+#   ansible-playbook --ask-vault-pass ansible/playbooks/deploy.yml
+#
+# Prerequisites:
+#   - app-server provisioned (app-server.yml already run)
+#   - JAR built: mvn clean package -DskipTests
+#   - db-server running with Postgres + PgBouncer up
+
+- hosts: app_server
+  become: true
+
+  tasks:
+
+    - name: Ensure /opt/kanbana exists
+      file:
+        path: /opt/kanbana
+        state: directory
+        mode: '0755'
+
+    - name: Copy JAR to app-server
+      copy:
+        src: "{{ playbook_dir }}/../../../target/kanbana.jar"
+        dest: /opt/kanbana/kanbana.jar
+        mode: '0644'
+
+    - name: Write application.properties from template
+      template:
+        src: "{{ playbook_dir }}/../roles/appserver/templates/application.properties"
+        dest: /opt/kanbana/application.properties
+        mode: '0600'   # owner read/write only — file contains db password
+        owner: root
+        group: root
+
+    - name: Restart kanbana container
+      docker_container:
+        name: kanbana
+        image: eclipse-temurin:21
+        state: started
+        restart: true              # force restart to pick up new JAR and config
+        restart_policy: always
+        volumes:
+          - /opt/kanbana:/opt/kanbana
+        ports:
+          - "8080:8080"
+        command: java -jar /opt/kanbana/kanbana.jar
+        working_dir: /opt/kanbana
+
+    - name: Wait for app to be healthy
+      uri:
+        url: http://localhost:8080/api/v1/boards
+        method: GET
+        status_code: 200
+      register: health
+      retries: 10          # try 10 times
+      delay: 5             # wait 5 seconds between retries
+      until: health.status == 200

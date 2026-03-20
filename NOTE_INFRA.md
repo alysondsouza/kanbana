@@ -312,6 +312,9 @@ Before fixing, confirm which networks WSL and Multipass are on:
 ```bash
 # WSL — check its IP and gateway
 ip route
+
+# Check available Hyper-V networks
+multipass networks
 ```
 
 Expected output:
@@ -386,7 +389,29 @@ wsl --shutdown
 
 ---
 
-## Step 3 — Verify Connectivity
+## Step 3 - Disable IPv6 on all Windows network adapters
+
+Disable IPv6:
+```
+# Run in PowerShell as Administrator
+Disable-NetAdapterBinding -Name "*" -ComponentID ms_tcpip6
+```
+
+Verify IPv4 connectivity:
+```
+# Check Multipass service status
+Get-Service Multipass
+
+# Restart Multipass service
+Restart-Service Multipass
+
+Test-NetConnection cdimage.ubuntu.com -Port 443
+# TcpTestSucceeded : True
+```
+
+---
+
+## Step 4 — Verify Connectivity
 
 ```bash
 # Ping VMs from WSL
@@ -576,6 +601,12 @@ db_password: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   ...
 ```
+
+AUTH_TYPE:
+PgBouncer's default AUTH_TYPE is md5. 
+Postgres 17 uses scram-sha-256 by default. 
+The authentication handshake failed because the two sides were using different methods.
+- Fix: Add AUTH_TYPE: "scram-sha-256" to the PgBouncer env block.
 
 Run playbook with vault:
 ```bash

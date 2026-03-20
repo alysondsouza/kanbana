@@ -21,13 +21,3 @@
       - "8080:8080"
     command: java -jar /opt/kanbana/kanbana.jar
 
-- name: Copy JAR to app-server
-  copy:
-    src: "{{ playbook_dir }}/../../../target/kanbana.jar"  # infra/ansible/playbooks/ → up 3 = repo root
-    dest: /opt/kanbana/kanbana.jar
-    mode: '0644'
-
-- name: Start container
-  docker_container:
-    name: kanbana
-    state: started             # JAR is guaranteed to be there now
