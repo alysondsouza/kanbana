@@ -1,3 +1,4 @@
 db_name: kanbana
 db_user: kanbana
 jdbc_url: "jdbc:postgresql://{{ hostvars['db-server']['ansible_host'] }}:6432/{{ db_name }}"
+jwt_secret: "{{ vault_jwt_secret }}"

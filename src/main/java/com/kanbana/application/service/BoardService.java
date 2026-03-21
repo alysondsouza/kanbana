@@ -4,6 +4,7 @@ import com.kanbana.application.dto.BoardResponseDTO;
 import com.kanbana.application.dto.CreateBoardRequestDTO;
 import com.kanbana.domain.model.Board;
 import com.kanbana.domain.repository.BoardRepository;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -16,17 +17,16 @@ public class BoardService {
 
     private final BoardRepository boardRepository;
 
-    // Constructor injection — preferred over @Autowired on field
     public BoardService(BoardRepository boardRepository) {
         this.boardRepository = boardRepository;
     }
 
     public BoardResponseDTO createBoard(CreateBoardRequestDTO request) {
         Board board = new Board(
-            UUID.randomUUID(),      // id generated here in the service
+            UUID.randomUUID(),
             request.getTitle(),
-            UUID.randomUUID(),      // placeholder ownerId until auth is implemented
-            Instant.now()           // createdAt generated here
+            getCurrentUserId(),     // real authenticated user ID — replaces UUID.randomUUID()
+            Instant.now()
         );
         Board saved = boardRepository.save(board);
         return BoardResponseDTO.from(saved);
@@ -39,7 +39,8 @@ public class BoardService {
     }
 
     public List<BoardResponseDTO> getAllBoards() {
-        return boardRepository.findAll()
+        // Only return boards owned by the authenticated user
+        return boardRepository.findByOwnerId(getCurrentUserId())
             .stream()
             .map(BoardResponseDTO::from)
             .collect(Collectors.toList());
@@ -50,5 +51,13 @@ public class BoardService {
             throw new EntityNotFoundException("Board not found: " + id);
         }
         boardRepository.deleteById(id);
+    }
+
+    // Reads the authenticated user's UUID from SecurityContext.
+    // JwtAuthFilter sets this as the principal on every valid request.
+    private UUID getCurrentUserId() {
+        return (UUID) SecurityContextHolder.getContext()
+                                           .getAuthentication()
+                                           .getPrincipal();
     }
 }

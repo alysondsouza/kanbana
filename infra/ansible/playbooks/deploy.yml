@@ -52,10 +52,13 @@
 
     - name: Wait for app to be healthy
       uri:
-        url: http://localhost:8080/api/v1/boards
-        method: GET
-        status_code: 200
+        url: http://localhost:8080/api/v1/auth/register
+        method: POST
+        body_format: json
+        body: '{"username":"healthcheck","email":"healthcheck@kanbana.io","password":"healthcheck123"}'
+        status_code: [201, 409]
       register: health
-      retries: 10          # try 10 times
-      delay: 5             # wait 5 seconds between retries
-      until: health.status == 200
+      retries: 10
+      delay: 5
+      until: health.status in [201, 409]
+
