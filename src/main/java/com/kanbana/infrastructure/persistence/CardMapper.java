@@ -18,7 +18,7 @@ public class CardMapper {
 
     public static CardEntity toEntity(Card card) {
         return new CardEntity(
-            null,               // let JPA generate the UUID
+            card.getId(),       // null on new cards (triggers INSERT), real ID on updates (triggers UPDATE)
             card.getTitle(),
             card.getDescription(),
             card.getPosition(),
