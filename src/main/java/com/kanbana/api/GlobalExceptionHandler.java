@@ -1,5 +1,6 @@
 package com.kanbana.api;
 
+import com.kanbana.application.service.ConflictException;
 import com.kanbana.application.service.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -9,12 +10,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
-// Catches exceptions thrown anywhere in the application and maps them to HTTP responses.
-// Without this, Spring would return raw stack traces or generic error pages.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // EntityNotFoundException (thrown by services) → 404
+    // EntityNotFoundException → 404
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ErrorResponseDTO> handleNotFound(EntityNotFoundException ex) {
         return ResponseEntity
@@ -22,7 +21,15 @@ public class GlobalExceptionHandler {
             .body(ErrorResponseDTO.of(404, ex.getMessage()));
     }
 
-    // @Valid failure on request DTOs → 400 with all validation messages
+    // ConflictException → 409 (duplicate username or email)
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponseDTO> handleConflict(ConflictException ex) {
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(ErrorResponseDTO.of(409, ex.getMessage()));
+    }
+
+    // @Valid failure on request DTOs → 400
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponseDTO> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult()
@@ -36,7 +43,7 @@ public class GlobalExceptionHandler {
             .body(ErrorResponseDTO.of(400, message));
     }
 
-    // Catch-all — any unhandled exception → 500
+    // Catch-all → 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex) {
         return ResponseEntity

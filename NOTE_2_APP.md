@@ -201,6 +201,84 @@ Each layer touches exactly one type of object. That is the discipline.
 
 ---
 
+# Tree
+
+## POST /api/v1/boards — Full Request Flow
+> Annotated file tree showing which file is touched at each step
+
+```
+src/main/java/com/kanbana/
+│
+├── KanbanaApplication.java              [1] Spring Boot starts. Scans all packages below.
+│
+├── api/
+│   ├── BoardController.java             [2] POST arrives. JSON → CreateBoardRequestDTO.
+│   │                                        Calls boardService.createBoard(dto)
+│   │                                   [10] Receives BoardResponseDTO back.
+│   │                                        Returns ResponseEntity 201 → Spring → JSON
+│   ├── ErrorResponseDTO.java                (used on errors only — not this happy path)
+│   └── GlobalExceptionHandler.java          (used on errors only — not this happy path)
+│
+├── application/
+│   ├── dto/
+│   │   ├── CreateBoardRequestDTO.java   [3] Carries { title } from controller → service.
+│   │   │                                    @NotBlank validated before reaching service.
+│   │   └── BoardResponseDTO.java        [9] BoardResponseDTO.from(board).
+│   │                                        Wraps domain Board for HTTP response.
+│   │
+│   └── service/
+│       ├── BoardService.java            [4] Builds new Board(UUID, title, ownerId, now).
+│       │                                    Calls boardRepository.save(board).
+│       │                                [8] Receives Board back (now has real UUID).
+│       │                                    Calls BoardResponseDTO.from(board).
+│       │                                    Returns DTO to controller.
+│       └── EntityNotFoundException.java     (used on errors only — not this happy path)
+│
+├── domain/
+│   ├── model/
+│   │   └── Board.java                   [5] The domain object. Pure Java, no framework.
+│   │                                        Created in BoardService. Travels through
+│   │                                        every layer as the common currency.
+│   └── repository/
+│       └── BoardRepository.java         [6] Interface only. Spring injects the Adapter here.
+│                                            BoardService calls .save(board) on this contract.
+│
+└── infrastructure/
+    └── persistence/
+        ├── BoardRepositoryAdapter.java  [7] Implements BoardRepository.
+        │                                    Calls BoardMapper.toEntity(board).      → [7a]
+        │                                    Calls jpa.save(entity) → Hibernate INSERT. → [7c][7d]
+        │                                    Postgres returns row with generated UUID.
+        │                                    Calls BoardMapper.toDomain(entity).     → [7b]
+        │                                    Returns Board (with real UUID) to BoardService.
+        ├── BoardMapper.java            [7a] Board → BoardEntity (ID = null → triggers INSERT)
+        │                               [7b] BoardEntity → Board  (ID = real UUID from Postgres)
+        ├── BoardEntity.java            [7c] DB row object in (ID=null) → out (ID=real UUID).
+        └── BoardJpaRepository.java     [7d] Spring Data runs INSERT. Postgres fills the UUID.
+```
+
+## Step summary
+
+| Step | File | What happens |
+|------|------|--------------|
+| 1   | `KanbanaApplication.java`       | Spring Boot starts, scans packages |
+| 2   | `BoardController.java`          | POST received, JSON → `CreateBoardRequestDTO`, calls service |
+| 3   | `CreateBoardRequestDTO.java`    | Carries `{ title }` into service, `@NotBlank` validated |
+| 4   | `BoardService.java`             | Builds `Board` domain object, calls `boardRepository.save(board)` |
+| 5   | `Board.java`                    | Domain object — travels through every layer as common currency |
+| 6   | `BoardRepository.java`          | Interface — Spring injects `BoardRepositoryAdapter` here |
+| 7   | `BoardRepositoryAdapter.java`   | Coordinates: 7a → 7c → 7d → 7c → 7b |
+| 7a  | `BoardMapper.java`              | `Board` → `BoardEntity` (ID = null) |
+| 7c  | `BoardEntity.java`              | DB row object with ID = null, passed to JPA |
+| 7d  | `BoardJpaRepository.java`       | Hibernate runs INSERT, Postgres returns row with real UUID |
+| 7c  | `BoardEntity.java`              | Same object, now carries real UUID from Postgres |
+| 7b  | `BoardMapper.java`              | `BoardEntity` → `Board` (with real UUID) |
+| 8   | `BoardService.java`             | Receives `Board` with UUID, calls `BoardResponseDTO.from(board)` |
+| 9   | `BoardResponseDTO.java`         | Wraps domain `Board` for HTTP response |
+| 10  | `BoardController.java`          | Wraps in `ResponseEntity 201`, Spring serialises → JSON |
+
+---
+
 ## 9.1 — Package Structure
 
 ### Package structure

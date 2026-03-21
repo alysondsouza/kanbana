@@ -9,9 +9,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-// Adapter — implements the domain port (BoardRepository) using JPA.
-// BoardService depends on BoardRepository (domain interface).
-// Spring injects this class wherever BoardRepository is needed.
 @Repository
 public class BoardRepositoryAdapter implements BoardRepository {
 
@@ -36,6 +33,14 @@ public class BoardRepositoryAdapter implements BoardRepository {
     @Override
     public List<Board> findAll() {
         return jpa.findAll()
+                  .stream()
+                  .map(BoardMapper::toDomain)
+                  .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Board> findByOwnerId(UUID ownerId) {
+        return jpa.findByOwnerId(ownerId)
                   .stream()
                   .map(BoardMapper::toDomain)
                   .collect(Collectors.toList());

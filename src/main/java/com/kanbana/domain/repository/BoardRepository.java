@@ -6,12 +6,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-// Port — defines what the application needs from persistence.
-// Infrastructure provides the implementation. No Spring imports here.
 public interface BoardRepository {
     Board save(Board board);
     Optional<Board> findById(UUID id);
     List<Board> findAll();
+    List<Board> findByOwnerId(UUID ownerId);    // returns only boards belonging to this user
     void deleteById(UUID id);
     boolean existsById(UUID id);
 }
