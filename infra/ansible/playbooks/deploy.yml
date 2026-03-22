@@ -49,6 +49,10 @@
           - "8080:8080"
         command: java -jar /opt/kanbana/kanbana.jar
         working_dir: /opt/kanbana
+        env:
+          JWT_SECRET: "{{ jwt_secret }}"          # from Ansible vault
+          DB_PASSWORD: "{{ db_password }}"         # from Ansible vault
+          ALLOWED_ORIGINS: "https://kanbana.pages.dev"  # Cloudflare Pages URL
 
     - name: Wait for app to be healthy
       uri:
@@ -61,4 +65,3 @@
       retries: 10
       delay: 5
       until: health.status in [201, 409]
-
