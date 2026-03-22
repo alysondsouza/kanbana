@@ -18,7 +18,7 @@ public class CardMapper {
 
     public static CardEntity toEntity(Card card) {
         return new CardEntity(
-            card.getId(),       // null on new cards (triggers INSERT), real ID on updates (triggers UPDATE)
+	    null,   // null → INSERT; Spring Data generates the UUID
             card.getTitle(),
             card.getDescription(),
             card.getPosition(),
