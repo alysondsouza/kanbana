@@ -17,7 +17,7 @@ public class BoardColumnMapper {
 
     public static BoardColumnEntity toEntity(BoardColumn column) {
         return new BoardColumnEntity(
-            column.getId(),     // null on new columns (triggers INSERT), real ID on updates (triggers UPDATE)
+            null,   // null → INSERT; Spring Data generates the UUID
             column.getTitle(),
             column.getPosition(),
             column.getBoardId()

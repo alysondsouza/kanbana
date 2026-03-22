@@ -11,6 +11,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -28,15 +34,18 @@ public class SecurityConfig {
             // Disable CSRF — stateless JWT apps don't use cookies for auth
             .csrf(csrf -> csrf.disable())
 
+            // Apply CORS config — must be before auth filters
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
             // Stateless — no session, no JSESSIONID cookie
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-            // Return 401 JSON-friendly response instead of redirect to login page
+            // Return 401 instead of redirect to login page
             .exceptionHandling(ex ->
                 ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 
-            // Endpoint rules — order matters: specific before general
+            // Endpoint rules — specific before general
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**").permitAll()       // register + login
                 .requestMatchers("/swagger-ui/**").permitAll()        // Swagger UI
@@ -56,5 +65,38 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
+    }
+
+    // CORS — allows the frontend to call the API from a different origin.
+    // 12-Factor App: allowed origins come from an env var, never hardcoded.
+    //
+    // Dev:  ALLOWED_ORIGINS="http://172.25.36.218:5173" mvn spring-boot:run
+    // Prod: ALLOWED_ORIGINS="https://kanbana.pages.dev" (set in Ansible vault)
+    //
+    // Multiple origins supported — comma-separated:
+    //   ALLOWED_ORIGINS="http://localhost:5173,http://172.25.36.218:5173"
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        // Read from env var — fall back to localhost for dev if not set
+        String allowedOriginsEnv = System.getenv()
+                .getOrDefault("ALLOWED_ORIGINS", "http://localhost:5173");
+
+        List<String> allowedOrigins = Arrays.asList(allowedOriginsEnv.split(","));
+
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+
+        // OPTIONS must be included — browsers send a preflight OPTIONS before the real request
+        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+
+        // Authorization — needed to send the JWT; Content-Type — needed for JSON bodies
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+
+        // Allows the browser to read response headers from cross-origin responses
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config); // apply to every endpoint
+        return source;
     }
 }
